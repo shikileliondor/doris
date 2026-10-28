@@ -1,0 +1,53 @@
+name: doris
+
+x-environment: &environment
+  APP_URL: http://localhost:${APP_PORT:-8080}
+  DB_CONNECTION: sqlite
+  DB_DATABASE: /data/database.sqlite
+  LOG_CHANNEL: stderr
+
+x-app: &app
+  image: doris-app
+  build:
+    context: .
+    args:
+      VITE_APP_NAME: ${APP_NAME:-Laravel}
+  env_file: .env
+  environment: *environment
+  volumes:
+    - database:/data
+    - storage:/var/www/html/storage/app
+  restart: unless-stopped
+
+services:
+  app:
+    <<: *app
+    environment:
+      <<: *environment
+      RUN_MIGRATIONS: "true"
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/up"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  queue:
+    <<: *app
+    command: ["php", "artisan", "queue:work", "--tries=3", "--max-time=3600"]
+    depends_on:
+      app:
+        condition: service_healthy
+
+  scheduler:
+    <<: *app
+    command: ["php", "artisan", "schedule:work"]
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  database:
+  storage:
